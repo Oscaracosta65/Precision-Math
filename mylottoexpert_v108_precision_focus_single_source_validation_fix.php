@@ -37873,22 +37873,8 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   if ((int)$__advEvidenceScored > max(0, (int)$__plkRunCount)) {
       $__plkUsesSharedEvidenceCount = true;
       $__plkRunCount = max(0, (int)$__advEvidenceScored);
-      $__plkStageLabel = $__advEvidenceStatusLabel;
-      if (!$__plkHasRange) {
-          $__plkStage = $__advEvidenceStatusKey !== '' ? $__advEvidenceStatusKey : $__plkStage;
-          $__plkStagePlain = $__advEvidenceStatusPlain;
-          $__plkSummary = $__advEvidenceStatusPlain;
-          $__plkNextStep = $__advEvidenceStatusNext;
-          $__plkEvidenceLineRaw = 'Shared Hive evidence found: ' . number_format((int)$__advEvidenceScored) . ' scored SKAI setting row' . ((int)$__advEvidenceScored === 1 ? '' : 's') . ' across ' . number_format((int)$__advEvidenceDraws) . ' completed draw' . ((int)$__advEvidenceDraws === 1 ? '' : 's') . '. ' . trim((string)($__advEvidenceStatusRaw['missing_line'] ?? ''));
-          $__plkEvidenceLine = htmlspecialchars(trim($__plkEvidenceLineRaw), ENT_QUOTES, 'UTF-8');
-          $__plkRangeBasisRaw = 'shared Hive setting evidence';
-          $__plkRangeBasis = htmlspecialchars($__plkRangeBasisRaw, ENT_QUOTES, 'UTF-8');
-          $__plkFocusLabel = 'Still building';
-          $__plkSummaryRangeLabel = 'Still broad - shared Hive evidence exists, but LottoExpert has not proven a narrowed Settings Precision range yet';
-          $__plkNotProvenRaw = trim((string)($__advEvidenceStatusRaw['missing_line'] ?? ''));
-          if ($__plkNotProvenRaw === '') { $__plkNotProvenRaw = html_entity_decode($__advEvidenceStatusPlain, ENT_QUOTES, 'UTF-8'); }
-          $__plkNotProven = htmlspecialchars($__plkNotProvenRaw, ENT_QUOTES, 'UTF-8');
-      }
+      $__plkEvidenceLineRaw = 'Mapper setting evidence: ' . number_format((int)$__advEvidenceScored) . ' scored SKAI setting row' . ((int)$__advEvidenceScored === 1 ? '' : 's') . ' across ' . number_format((int)$__advEvidenceDraws) . ' completed draw' . ((int)$__advEvidenceDraws === 1 ? '' : 's') . '.';
+      $__plkEvidenceLine = htmlspecialchars(trim($__plkEvidenceLineRaw), ENT_QUOTES, 'UTF-8');
   }
   /* [[MLE_V94_PRECISION_FOCUS_FULL_SAVED_HISTORY_COUNTS]]
    * The lottery-level mapper can legitimately count only SKAI setting rows usable
@@ -37904,9 +37890,18 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
       $__plkRunCount = $__advV94SavedScored;
       if (!$__plkHasRange) {
           $__plkEvidenceLine = $__advV94SavedLine;
-          $__plkRangeBasisRaw = 'full canonical saved prediction history plus strict settings mapper';
-          $__plkRangeBasis = htmlspecialchars($__plkRangeBasisRaw, ENT_QUOTES, 'UTF-8');
       }
+  }
+  if (!$__plkHasRange) {
+      $__plkStage = $__advEvidenceStatusKey !== '' ? $__advEvidenceStatusKey : $__plkStage;
+      $__plkStageLabel = $__advEvidenceStatusLabel;
+      $__plkStagePlain = $__advEvidenceStatusPlain;
+      $__plkSummary = $__advEvidenceStatusPlain;
+      $__plkNextStep = $__advEvidenceStatusNext;
+      $__plkSummaryRangeLabel = 'Still broad - ' . html_entity_decode($__advEvidenceStatusPlain, ENT_QUOTES, 'UTF-8');
+      $__plkNotProvenRaw = trim((string)($__advEvidenceStatusRaw['missing_line'] ?? ''));
+      if ($__plkNotProvenRaw === '') { $__plkNotProvenRaw = html_entity_decode($__advEvidenceStatusPlain, ENT_QUOTES, 'UTF-8'); }
+      $__plkNotProven = htmlspecialchars($__plkNotProvenRaw, ENT_QUOTES, 'UTF-8');
   }
   $__plkEvidenceCountNoun = !empty($__advV94HasSavedHistory) ? 'scored/evaluated prediction row' : (!empty($__plkUsesSharedEvidenceCount) ? 'scored SKAI setting row' : 'scored run');
   $__plkEvidenceCountLabel = number_format((int)$__plkRunCount) . ' ' . $__plkEvidenceCountNoun . ((int)$__plkRunCount === 1 ? '' : 's') . ' analyzed for this lottery';
@@ -38050,6 +38045,11 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   }
   $__mlePclFillPct = max(0, min(100, (($__mlePclLevel - 1) / 5) * 100));
   $__mlePclFactorSummary = number_format($__mlePclPassCount) . ' passed, ' . number_format($__mlePclWatchCount) . ' developing, ' . number_format($__mlePclNeedCount) . ' need more evidence';
+  $__plkBroadRangeReasonRaw = trim((string)($__advEvidenceStatusRaw['missing_line'] ?? ''));
+  if ($__plkBroadRangeReasonRaw === '') { $__plkBroadRangeReasonRaw = trim((string)($__advEvidenceStatusRaw['plain'] ?? '')); }
+  $__plkBroadRangeReason = htmlspecialchars($__plkBroadRangeReasonRaw, ENT_QUOTES, 'UTF-8');
+  $__plkEdgeFactLabel = htmlspecialchars($__mlePclEdgeStatus, ENT_QUOTES, 'UTF-8');
+  $__plkEdgeFactDetail = htmlspecialchars($__mlePclEdgeDetail, ENT_QUOTES, 'UTF-8');
   $__mlePclStageGuide = array(
       1 => array(
           'name' => 'Foundation Building',
@@ -38386,6 +38386,7 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   $__advHorizonHasSweetRange = ($__advHorizonSweetMin !== null && $__advHorizonSweetMax !== null && $__advHorizonSweetMax >= $__advHorizonSweetMin);
   $__advHorizonSweetLabelRaw = $__advHorizonHasSweetRange ? ((int)round($__advHorizonSweetMin) . ' to ' . (int)round($__advHorizonSweetMax) . ' draws back') : '';
   $__advHorizonCurrentLabelRaw = ($__advHorizonCurrentVal >= 25.0 && $__advHorizonCurrentVal <= 1000.0) ? ('Current window: ' . (int)round($__advHorizonCurrentVal) . ' draws back') : '';
+  $__advHorizonCoverageReady = ($__advHorizonCoverageMet || !empty($__advEvidenceStatusRaw['history_complete']));
   $__advHorizonSummaryLabelRaw = $__advHorizonDisplayLabel;
   if ($__advHorizonHasSweetRange) {
       $__advHorizonSummaryLabelRaw = 'Best focused window: ' . $__advHorizonSweetLabelRaw;
@@ -38395,7 +38396,7 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   } elseif ($__advHorizonHasRange && $__advHorizonCurrentLabelRaw !== '') {
       $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ' (range being explored: ' . $__advHorizonDisplayLabel . ')';
   } elseif ($__advHorizonCurrentLabelRaw !== '') {
-      $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ($__advHorizonCoverageMet
+      $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ($__advHorizonCoverageReady
           ? ' (tested corridor scored; range still broad: ' . $__advHorizonDisplayLabel . ')'
           : ' (not proven yet; full range still open: ' . $__advHorizonDisplayLabel . ')');
   }
@@ -42608,9 +42609,9 @@ if (!function_exists('mle_render_post_draw_result')) {
           <small><?php echo $__plkEvidenceLine; ?></small>
         </div>
         <div class="mle-plk-fact mle-plk-fact--edge">
-          <span>Random edge check</span>
-          <strong><?php echo $__plkEdgeLabel; ?></strong>
-          <small>Avg rank lift: <?php echo $__plkAvgLiftLabel; ?> | Penalized lift: <?php echo $__plkPenLiftLabel; ?> | Top-20 lift: <?php echo $__plkTop20LiftLabel; ?></small>
+          <span>Edge vs Random</span>
+          <strong><?php echo $__plkEdgeFactLabel; ?></strong>
+          <small><?php echo $__plkEdgeFactDetail; ?></small>
         </div>
         <div class="mle-plk-fact">
           <span>Next step</span>
@@ -42666,7 +42667,7 @@ if (!function_exists('mle_render_post_draw_result')) {
         <div class="mle-plk-zone-info">
           <span class="mle-plk-zone-basis">Setting being tested: <?php echo $__plkRangeBasis; ?></span>
           <?php if (!$__plkHasRange): ?>
-          <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">Full Settings Precision range: 0% to 100% — not narrowed yet</span>
+          <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">Full Settings Precision range: 0% to 100% - not narrowed yet because <?php echo $__plkBroadRangeReason; ?></span>
           <?php elseif ($__plkHasSweetRange): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--sweet">Current Settings Precision test range: <?php echo htmlspecialchars($__plkSweetLabel, ENT_QUOTES, 'UTF-8'); ?><?php echo ($__plkSweetLabel !== $__plkRangeLabel) ? ' (broader evidence range: ' . htmlspecialchars($__plkRangeLabel, ENT_QUOTES, 'UTF-8') . ')' : ''; ?></span>
           <?php elseif ($__plkStage === 'narrowing_signal'): ?>
@@ -42682,8 +42683,12 @@ if (!function_exists('mle_render_post_draw_result')) {
         <p class="mle-precision-lock__horizon-intro">
           This graphic shows the History Window Range: 25 to 1,000 draws back for this lottery.
           It is different from the Settings Precision Range above.
-          <?php if ($__advHorizonHasData && $__advHorizonCoverageMet): ?>
+          <?php if ($__advHorizonCoverageReady): ?>
+          <?php if ($__advHorizonHasData): ?>
           <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, and the lower, middle, and upper tested SKAI window corridor points are covered. <?php echo $__advHorizonHasRange ? 'The range is narrowing inside that tested corridor.' : 'The corridor is scored, but the strongest window range is still broad.'; ?>
+          <?php else: ?>
+          The lower, middle, and upper tested SKAI window corridor points are already covered by scored evidence for this lottery, but the strongest History Window Range is still broad.
+          <?php endif; ?>
           <?php elseif ($__advHorizonHasData && $__advHorizonDistinctWindows >= 2): ?>
           <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, but the tested lower/middle/upper window corridor is not complete yet. This is not enough to narrow the History Window Range.
           <?php elseif ($__advHorizonHasData): ?>
@@ -42726,7 +42731,9 @@ if (!function_exists('mle_render_post_draw_result')) {
           <span class="mle-plk-zone-badge mle-plk-zone-badge--sweet">Best focused history window: <?php echo htmlspecialchars($__advHorizonSweetLabelRaw, ENT_QUOTES, 'UTF-8'); ?><?php echo ($__advHorizonSweetLabelRaw !== $__advHorizonDisplayLabel) ? ' (broader range: ' . htmlspecialchars($__advHorizonDisplayLabel, ENT_QUOTES, 'UTF-8') . ')' : ''; ?></span>
           <?php elseif ($__advHorizonHasRange): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--<?php echo ($__advHorizonStage === 'narrowing') ? 'narrow' : 'broad'; ?>">Best history window so far: <?php echo (int)round($__advHorizonRangeMin); ?> to <?php echo (int)round($__advHorizonRangeMax); ?> draws &mdash; <?php echo $__advHorizonStageLabel; ?></span>
-          <?php elseif ($__advHorizonHasData && $__advHorizonCoverageMet): ?>
+          <?php elseif ($__advHorizonHasData && $__advHorizonCoverageReady): ?>
+          <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">History Window corridor is scored, but the strongest range is still broad across <?php echo htmlspecialchars($__advHorizonDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+          <?php elseif ($__advHorizonCoverageReady): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">History Window corridor is scored, but the strongest range is still broad across <?php echo htmlspecialchars($__advHorizonDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></span>
           <?php elseif ($__advHorizonHasData): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">History Window range: 25 to 1,000 draws back &mdash; current window observed, but broad window comparison is still needed</span>
