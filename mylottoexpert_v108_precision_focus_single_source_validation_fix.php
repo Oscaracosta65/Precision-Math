@@ -19347,21 +19347,16 @@ if (!function_exists('mylottoexpertV98ExtractScoredSettingValuesFromCardRows')) 
             $settings = function_exists('mylottoexpertResolveEffectiveSettings') ? mylottoexpertResolveEffectiveSettings($row) : array();
             if (!is_array($settings) || empty($settings)) { continue; }
             $hasAny = false;
-            foreach (array('signal_blend_ai_pct','core_ai_ai_pct','skai_blend_ai_pct','blend_ai_pct','ai_pct','blend_percent','blend_pct','ai_blend_pct') as $k) {
-                if (isset($settings[$k]) && is_numeric($settings[$k])) {
-                    $v = max(0.0, min(100.0, (float)$settings[$k]));
-                    $out['blend_values'][] = $v;
-                    $hasAny = true;
-                    break;
-                }
+            $vals = function_exists('mylottoexpertV99ExtractBlendAndHistoryValuesFromSettings')
+                ? (array)mylottoexpertV99ExtractBlendAndHistoryValuesFromSettings((array)$settings)
+                : array('blend'=>null, 'history'=>null);
+            if (isset($vals['blend']) && $vals['blend'] !== null && is_numeric($vals['blend'])) {
+                $out['blend_values'][] = (float)$vals['blend'];
+                $hasAny = true;
             }
-            foreach (array('skai_window_size','draws_used','draws_analyzed','skip_window','window_size','history_window','history_window_size','lookback_draws','training_window') as $k) {
-                if (isset($settings[$k]) && is_numeric($settings[$k])) {
-                    $v = max(25.0, min(1000.0, (float)$settings[$k]));
-                    $out['history_values'][] = $v;
-                    $hasAny = true;
-                    break;
-                }
+            if (isset($vals['history']) && $vals['history'] !== null && is_numeric($vals['history'])) {
+                $out['history_values'][] = (float)$vals['history'];
+                $hasAny = true;
             }
             if ($hasAny) { $out['scored_rows_with_settings']++; }
         }
@@ -21426,13 +21421,10 @@ function mleAdvisoryComputeHorizonWindowLockData(array $perfRows, array $savedBy
         $settings = mylottoexpertResolveEffectiveSettings($savedById[$sid]);
 
         $windowVal = null;
-        foreach (array('skai_window_size','draws_used','draws_analyzed','skip_window','window_size') as $wk) {
-            if (isset($settings[$wk]) && is_numeric($settings[$wk])) {
-                $wv = (float)$settings[$wk];
-                if ($wv >= $HORIZON_MIN && $wv <= $HORIZON_MAX) {
-                    $windowVal = $wv;
-                    break;
-                }
+        if (function_exists('mylottoexpertV99ExtractBlendAndHistoryValuesFromSettings')) {
+            $resolvedVals = (array)mylottoexpertV99ExtractBlendAndHistoryValuesFromSettings((array)$settings);
+            if (isset($resolvedVals['history']) && $resolvedVals['history'] !== null && is_numeric($resolvedVals['history'])) {
+                $windowVal = (float)$resolvedVals['history'];
             }
         }
         if ($windowVal === null) { continue; }
@@ -21561,7 +21553,9 @@ function mleAdvisoryComputeHorizonWindowLockData(array $perfRows, array $savedBy
         $stageLabel = 'Early horizon signal';
     } else {
         $stage = 'exploring';
-        $stageLabel = 'Needs broader window comparison';
+        $stageLabel = !empty($horizonCoverage['full_coverage_met'])
+            ? 'Window corridor is scored, but the range is still broad'
+            : 'Needs broader window comparison';
     }
 
     return array(
@@ -29153,15 +29147,21 @@ if (!function_exists('mylottoexpertV99LoadCanonicalScoredSettingCoverage')) {
         if ($has('actual_draw_date')) { $scoredParts[] = "(s." . $db->quoteName('actual_draw_date') . " IS NOT NULL AND s." . $db->quoteName('actual_draw_date') . " <> '0000-00-00')"; }
         $scoredCond = '(' . implode(' OR ', $scoredParts) . ')';
         $select = array('s.' . $db->quoteName('id') . ' AS saved_id');
-        foreach (array('settings_json','settings','params_json','params','prediction_target_json','skai_window_size','draws_used','draws_analyzed','skip_window','window_size','history_window','history_window_size','lookback_draws','training_window','used_window','best_window','tuned_window','signal_blend_ai_pct','core_ai_ai_pct','skai_blend_ai_pct','blend_ai_pct','ai_pct','blend_percent','blend_pct','ai_blend_pct','source_batch_run_id') as $col) {
+        foreach (array('settings_json','settings','params_json','params','full_settings_json','batch_full_settings_json','batch_settings_json','batch_run_full_settings_json','batch_run_settings_json','prediction_target_json','skai_window_size','draws_used','draws_analyzed','skip_window','window_size','history_window','history_window_size','lookback_draws','training_window','used_window','best_window','tuned_window','signal_blend_ai_pct','core_ai_ai_pct','skai_blend_ai_pct','blend_ai_pct','ai_pct','blend_percent','blend_pct','ai_blend_pct','source_batch_run_id') as $col) {
             if ($has($col)) { $select[] = 's.' . $db->quoteName($col) . ' AS ' . $db->quoteName($col); }
         }
         $join = '';
         try { $brColsRaw = $db->getTableColumns('#__mle_skai_batch_run', false); $brCols = is_array($brColsRaw) ? array_keys($brColsRaw) : array(); } catch (\Throwable $e) { $brCols = array(); }
         if ($has('source_batch_run_id') && in_array('id', $brCols, true)) {
             $join = ' LEFT JOIN ' . $db->quoteName('#__mle_skai_batch_run') . ' br ON br.' . $db->quoteName('id') . ' = s.' . $db->quoteName('source_batch_run_id');
-            foreach (array('full_settings_json'=>'batch_full_settings_json','settings_json'=>'batch_settings_json') as $brCol => $alias) {
-                if (in_array($brCol, $brCols, true)) { $select[] = 'br.' . $db->quoteName($brCol) . ' AS ' . $db->quoteName($alias); }
+            foreach (array(
+                'full_settings_json'=>array('batch_full_settings_json','batch_run_full_settings_json'),
+                'settings_json'=>array('batch_settings_json','batch_run_settings_json')
+            ) as $brCol => $aliases) {
+                if (!in_array($brCol, $brCols, true)) { continue; }
+                foreach ((array)$aliases as $alias) {
+                    $select[] = 'br.' . $db->quoteName($brCol) . ' AS ' . $db->quoteName($alias);
+                }
             }
         }
         $order = $has('date_saved') ? ('s.' . $db->quoteName('date_saved') . ' DESC') : ('s.' . $db->quoteName('id') . ' DESC');
@@ -29171,7 +29171,7 @@ if (!function_exists('mylottoexpertV99LoadCanonicalScoredSettingCoverage')) {
             if (!is_array($row)) { continue; }
             $out['rows_scanned']++;
             $settings = array();
-            foreach (array('settings_json','settings','params_json','params','batch_full_settings_json','batch_settings_json','prediction_target_json') as $jsonKey) {
+            foreach (array('settings_json','settings','params_json','params','full_settings_json','batch_full_settings_json','batch_settings_json','batch_run_full_settings_json','batch_run_settings_json','prediction_target_json') as $jsonKey) {
                 if (array_key_exists($jsonKey, $row)) { $settings = mylottoexpertV99DecodeSettingsCandidateInto($settings, $row[$jsonKey]); }
             }
             foreach (array('skai_window_size','draws_used','draws_analyzed','skip_window','window_size','history_window','history_window_size','lookback_draws','training_window','used_window','best_window','tuned_window','signal_blend_ai_pct','core_ai_ai_pct','skai_blend_ai_pct','blend_ai_pct','ai_pct','blend_percent','blend_pct','ai_blend_pct') as $directKey) {
@@ -29282,15 +29282,21 @@ if (!function_exists('mylottoexpertV107LoadCanonicalOutcomeValidationEvidence'))
             'top_20_main_numbers','top20_numbers','top_numbers','skai_top_numbers','ranked_main_numbers','main_candidates',
             'daily_top_picks_json','daily_primary_prediction_json','daily_primary_prediction','daily_set_predictions_json',
             'skai_top_n_numbers','top_n_numbers','mle_top_n_numbers','main_prediction_count','prediction_main_count',
-            'settings_json','settings','params_json','params','prediction_target_json','source_batch_run_id'
+            'settings_json','settings','params_json','params','full_settings_json','batch_full_settings_json','batch_settings_json','batch_run_full_settings_json','batch_run_settings_json','prediction_target_json','source_batch_run_id'
         );
         foreach ($wanted as $col) { if ($has($col)) { $select[] = 's.' . $db->quoteName($col) . ' AS ' . $db->quoteName($col); } }
         $join = '';
         try { $brColsRaw = $db->getTableColumns('#__mle_skai_batch_run', false); $brCols = is_array($brColsRaw) ? array_keys($brColsRaw) : array(); } catch (\Throwable $e) { $brCols = array(); }
         if ($has('source_batch_run_id') && in_array('id', $brCols, true)) {
             $join = ' LEFT JOIN ' . $db->quoteName('#__mle_skai_batch_run') . ' br ON br.' . $db->quoteName('id') . ' = s.' . $db->quoteName('source_batch_run_id');
-            foreach (array('full_settings_json'=>'batch_full_settings_json','settings_json'=>'batch_settings_json') as $brCol => $alias) {
-                if (in_array($brCol, $brCols, true)) { $select[] = 'br.' . $db->quoteName($brCol) . ' AS ' . $db->quoteName($alias); }
+            foreach (array(
+                'full_settings_json'=>array('batch_full_settings_json','batch_run_full_settings_json'),
+                'settings_json'=>array('batch_settings_json','batch_run_settings_json')
+            ) as $brCol => $aliases) {
+                if (!in_array($brCol, $brCols, true)) { continue; }
+                foreach ((array)$aliases as $alias) {
+                    $select[] = 'br.' . $db->quoteName($brCol) . ' AS ' . $db->quoteName($alias);
+                }
             }
         }
         $order = $has('date_saved') ? ('s.' . $db->quoteName('date_saved') . ' DESC') : ('s.' . $db->quoteName('id') . ' DESC');
@@ -29749,6 +29755,12 @@ if (!function_exists('mylottoexpertBuildEvidenceReadinessStatus')) {
         $rawScore = $coverageComponent + $sampleComponent + $effectComponent + $repeatComponent + $stabilityComponent + $validationComponent;
         $cap = 100;
         $capReasons = array();
+        $outcomeSampleInitialMet = ($outcomeCount >= 27 && $outcomeDrawCount >= 10);
+        $outcomeSampleDevelopingMet = ($outcomeCount >= 108 && $outcomeDrawCount >= 35);
+        $mapperEvidenceLimited = ($scored < 45 || $draws < 8);
+        $baselineNeedsMoreEvidence = (!$baselineAvailable || ($baselineLiftPct !== null && $baselineLiftPct <= 0.0) || ($baselineZ !== null && $baselineZ < 1.00));
+        $performanceBelowTrustFloor = ($avgHits < 2.5 || ($threePlusRate < 0.05 && $outcomeCount >= 45) || $zeroRate >= 0.25 || $recentIsWeak);
+        $repeatabilityLimited = ($repeatableSignals < 2 || $bestDraws < 5 || $weakRatio >= 0.35);
 
         if (empty($blend['complete']) || empty($hist['complete'])) {
             $cap = min($cap, 39);
@@ -29761,19 +29773,19 @@ if (!function_exists('mylottoexpertBuildEvidenceReadinessStatus')) {
 
         if ($scored < 27 || $draws < 6) {
             $cap = min($cap, 44);
-            $capReasons[] = 'Fewer than 27 scored rows or 6 completed draw dates are available.';
+            $capReasons[] = 'Fewer than 27 mapped SKAI setting rows or 6 mapper draw dates are available.';
         } elseif ($scored < 54 || $draws < 10) {
             $cap = min($cap, 54);
-            $capReasons[] = 'Fewer than 54 scored rows or 10 completed draw dates are available.';
+            $capReasons[] = 'Fewer than 54 mapped SKAI setting rows or 10 mapper draw dates are available.';
         } elseif ($scored < 90 || $draws < 15) {
             $cap = min($cap, 64);
-            $capReasons[] = 'Fewer than 90 scored rows or 15 completed draw dates are available.';
+            $capReasons[] = 'Fewer than 90 mapped SKAI setting rows or 15 mapper draw dates are available.';
         } elseif ($scored < 150 || $draws < 24) {
             $cap = min($cap, 74);
-            $capReasons[] = 'Fewer than 150 scored rows or 24 completed draw dates are available.';
+            $capReasons[] = 'Fewer than 150 mapped SKAI setting rows or 24 mapper draw dates are available.';
         } elseif ($scored < 225 || $draws < 36) {
             $cap = min($cap, 84);
-            $capReasons[] = 'Fewer than 225 scored rows or 36 completed draw dates are available.';
+            $capReasons[] = 'Fewer than 225 mapped SKAI setting rows or 36 mapper draw dates are available.';
         }
 
         if ($outcomeCount < 27) {
@@ -29931,6 +29943,25 @@ if (!function_exists('mylottoexpertBuildEvidenceReadinessStatus')) {
             $next = 'Run broad discovery until edge, center, history-window, and outcome validation comparisons are scored.';
         }
 
+        if ($pending <= 0) {
+            if (empty($blend['complete']) || empty($hist['complete'])) {
+                $next = 'Run or complete scored SKAI batches that fill the missing lower, middle, and upper blend/history-window corridor points.';
+            } elseif (!$outcomeSampleInitialMet) {
+                $next = 'Score more completed draws for this lottery until outcome validation has at least 27 scored prediction outcomes across 10 independent draw dates.';
+            } elseif ($mapperEvidenceLimited) {
+                $next = 'Build more mapper setting evidence for the current settings family; full outcome validation is already ahead of the stricter mapper sample.';
+            } elseif ($baselineNeedsMoreEvidence) {
+                $next = 'Keep the current tested corridor stable and score more independent draws until Edge vs Random clears the minimum lift and z-score screens.';
+            } elseif ($performanceBelowTrustFloor || $repeatabilityLimited) {
+                $next = 'Keep scoring future draws for the current tested corridor so lift, repeatability, and stability can improve before narrowing further.';
+            }
+            if ($outcomeSampleDevelopingMet && $key === 'broad_testing_active' && !empty($blend['complete']) && !empty($hist['complete'])) {
+                $key = 'early_signal_found';
+                $label = 'Early Signal Found';
+                $plain = 'Coverage and outcome validation exist, but the mapped setting evidence and trust gates are still developing.';
+            }
+        }
+
         $scoreLine = 'Evidence-readiness score: ' . number_format($score) . '/100 after strict caps using independent draw-level main-number validation against the random baseline. Raw score before caps: ' . number_format($rawScore) . '/100. ' . $baselineDescription;
         $componentLine = 'Components: coverage ' . $coverageComponent . '/25, sample ' . $sampleComponent . '/15, effect/performance proxy ' . $effectComponent . '/20, repeatability ' . $repeatComponent . '/15, stability ' . $stabilityComponent . '/15, validation proxy ' . $validationComponent . '/10.';
         $capLine = empty($capReasons) ? 'No major cap is currently limiting the status.' : implode(' ', array_unique($capReasons));
@@ -29966,7 +29997,16 @@ if (!function_exists('mylottoexpertBuildEvidenceReadinessStatus')) {
         $missingParts = array();
         if (empty($blend['complete'])) { $missingParts[] = 'Blend missing: ' . (string)$blend['missing']; }
         if (empty($hist['complete'])) { $missingParts[] = 'History windows missing: ' . (string)$hist['missing']; }
+        if (!$outcomeSampleInitialMet) {
+            $missingParts[] = 'Outcome validation still needs at least 27 scored prediction outcomes across 10 independent draw dates.';
+        } elseif ($mapperEvidenceLimited) {
+            $missingParts[] = 'Full outcome evidence is sufficient, but mapper setting evidence is still limited to ' . number_format((int)$scored) . ' mapped row' . ($scored === 1 ? '' : 's') . ' across ' . number_format((int)$draws) . ' completed draw' . ($draws === 1 ? '' : 's') . '.';
+        }
+        if ($baselineNeedsMoreEvidence) {
+            $missingParts[] = $baselineAvailable ? 'Edge vs Random is still below the minimum lift/z-score screen.' : 'Edge vs Random is still measuring because comparable predicted-number counts are incomplete.';
+        }
         if ($avgHits < 2.5) { $missingParts[] = 'Average main-number hits are below the current precision-trust performance floor.'; }
+        if ($repeatabilityLimited && $outcomeSampleInitialMet) { $missingParts[] = 'Settings repeatability/stability is still limited across independent draw dates.'; }
         $missing = empty($missingParts) ? 'No coverage gaps are currently blocking this status; final narrowing still depends on performance, edge, repeatability, and stability gates.' : implode(' | ', $missingParts);
         return array(
             'key'=>$key,
@@ -38321,8 +38361,10 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   $__advPhasePrimary = htmlspecialchars((string)($__advPhaseState['primary_label'] ?? ''), ENT_QUOTES, 'UTF-8');
   $__advPhaseMessage = htmlspecialchars((string)($__advPhaseState['message'] ?? ''), ENT_QUOTES, 'UTF-8');
   $__advHorizonLock = (array)($__advCard['horizon_window_lock'] ?? array());
+  $__advHorizonCoverage = (array)($__advHorizonLock['horizon_coverage'] ?? array());
   $__advHorizonHasData = (int)($__advHorizonLock['run_count'] ?? 0) >= 1;
   $__advHorizonHasRange = !empty($__advHorizonLock['has_range']);
+  $__advHorizonCoverageMet = !empty($__advHorizonLock['horizon_full_coverage_met']);
   $__advHorizonDistinctWindows = (int)($__advHorizonLock['distinct_windows'] ?? 0);
   $__advHorizonTestedMin = (float)($__advHorizonLock['tested_min'] ?? 0.0);
   $__advHorizonTestedMax = (float)($__advHorizonLock['tested_max'] ?? 0.0);
@@ -38353,7 +38395,9 @@ if (!isset($__skaiPerfAllHistory) || !is_array($__skaiPerfAllHistory)) {
   } elseif ($__advHorizonHasRange && $__advHorizonCurrentLabelRaw !== '') {
       $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ' (range being explored: ' . $__advHorizonDisplayLabel . ')';
   } elseif ($__advHorizonCurrentLabelRaw !== '') {
-      $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ' (not proven yet; full range still open: ' . $__advHorizonDisplayLabel . ')';
+      $__advHorizonSummaryLabelRaw = $__advHorizonCurrentLabelRaw . ($__advHorizonCoverageMet
+          ? ' (tested corridor scored; range still broad: ' . $__advHorizonDisplayLabel . ')'
+          : ' (not proven yet; full range still open: ' . $__advHorizonDisplayLabel . ')');
   }
 
   $__advHorizonSpan = 975.0;
@@ -42638,10 +42682,10 @@ if (!function_exists('mle_render_post_draw_result')) {
         <p class="mle-precision-lock__horizon-intro">
           This graphic shows the History Window Range: 25 to 1,000 draws back for this lottery.
           It is different from the Settings Precision Range above.
-          <?php if ($__advHorizonHasData && !empty($__advHorizonLock['horizon_full_coverage_met']) && $__advHorizonDistinctWindows >= 5): ?>
-          <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, including the 25 and 1,000 draw edges.
+          <?php if ($__advHorizonHasData && $__advHorizonCoverageMet): ?>
+          <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, and the lower, middle, and upper tested SKAI window corridor points are covered. <?php echo $__advHorizonHasRange ? 'The range is narrowing inside that tested corridor.' : 'The corridor is scored, but the strongest window range is still broad.'; ?>
           <?php elseif ($__advHorizonHasData && $__advHorizonDistinctWindows >= 2): ?>
-          <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, but the full 25 to 1,000 draw space has not been proven yet. This is not enough to narrow the History Window Range.
+          <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored across <?php echo (int)$__advHorizonDistinctWindows; ?> distinct history-window values, but the tested lower/middle/upper window corridor is not complete yet. This is not enough to narrow the History Window Range.
           <?php elseif ($__advHorizonHasData): ?>
           <?php echo (int)$__advHorizonRunCount; ?> run<?php echo $__advHorizonRunCount === 1 ? '' : 's'; ?> have been scored, but only <?php echo max(1, (int)$__advHorizonDistinctWindows); ?> distinct history-window value has been tested. This is not enough to narrow the History Window Range.
           <?php elseif ($__advIsHorizonBatch): ?>
@@ -42682,6 +42726,8 @@ if (!function_exists('mle_render_post_draw_result')) {
           <span class="mle-plk-zone-badge mle-plk-zone-badge--sweet">Best focused history window: <?php echo htmlspecialchars($__advHorizonSweetLabelRaw, ENT_QUOTES, 'UTF-8'); ?><?php echo ($__advHorizonSweetLabelRaw !== $__advHorizonDisplayLabel) ? ' (broader range: ' . htmlspecialchars($__advHorizonDisplayLabel, ENT_QUOTES, 'UTF-8') . ')' : ''; ?></span>
           <?php elseif ($__advHorizonHasRange): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--<?php echo ($__advHorizonStage === 'narrowing') ? 'narrow' : 'broad'; ?>">Best history window so far: <?php echo (int)round($__advHorizonRangeMin); ?> to <?php echo (int)round($__advHorizonRangeMax); ?> draws &mdash; <?php echo $__advHorizonStageLabel; ?></span>
+          <?php elseif ($__advHorizonHasData && $__advHorizonCoverageMet): ?>
+          <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">History Window corridor is scored, but the strongest range is still broad across <?php echo htmlspecialchars($__advHorizonDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></span>
           <?php elseif ($__advHorizonHasData): ?>
           <span class="mle-plk-zone-badge mle-plk-zone-badge--broad">History Window range: 25 to 1,000 draws back &mdash; current window observed, but broad window comparison is still needed</span>
           <?php elseif ($__advIsHorizonBatch): ?>
